@@ -6,6 +6,7 @@ from builtins import *
 
 import requests
 import requests_cache
+import urllib3
 
 DEFAULT_HOST = 'http://www.biomart.org'
 DEFAULT_PATH = '/biomart/martservice'
@@ -14,6 +15,26 @@ DEFAULT_SCHEMA = 'default'
 
 requests_cache.install_cache('.pybiomart')
 
+# Fix to one of urllib3.HTTPResponse private methods that allows downloading 
+#   using archive ensembl biomart links like: 
+#   http://Apr2019.archive.ensembl.org
+#   Source: https://github.com/psf/requests/issues/4248
+def _update_chunk_length(self):
+    # First, we'll figure out length of a chunk and then
+    # we'll try to read it from socket.
+    if self.chunk_left is not None:
+        return
+    line = self._fp.fp.readline()
+    line = line.split(b';', 1)[0]
+    line = (len(line)>0 and line or "0")     # added this line
+    try:
+        self.chunk_left = int(line, 16)
+    except ValueError:
+        # Invalid chunked protocol response, abort.
+        self.close()
+        raise httplib.IncompleteRead(line)
+
+urllib3.HTTPResponse._update_chunk_length = _update_chunk_length
 
 class ServerBase(object):
     """Base class that handles requests to the biomart server.
